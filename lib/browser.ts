@@ -137,6 +137,10 @@ export async function createRenderPage(options: {
       }
     });
     const page = await context.newPage();
+    page.on('requestfailed', request => {
+      const reason = request.failure()?.errorText || 'Browser blocked or failed this request';
+      blocked(request.url(), reason);
+    });
     // WebSockets are not covered by HTTP route interception.
     await page.routeWebSocket('**/*', socket => socket.close());
     page.on('popup', popup => { void popup.close(); });
