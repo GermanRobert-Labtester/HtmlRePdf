@@ -5,7 +5,6 @@
  */
 import path from 'node:path';
 import fs from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
 import { lookup } from 'node:dns/promises';
 import { BlockList, isIP } from 'node:net';
 
@@ -136,7 +135,7 @@ function configuredRoots(): string[] {
 }
 
 async function resolveLocalFile(input: string): Promise<{ root: string; relative: string }> {
-  if (input.includes('\0') || input.includes('\\') || input.split('/').includes('..') ||
+  if (input.includes('\0') || input.includes('\\') || /^[a-z][a-z0-9+.-]*:/i.test(input) || input.split('/').includes('..') ||
       input.startsWith('file:') || input.includes('?') || input.includes('#')) {
     throw new RenderPolicyError('Local path traversal or unsupported scheme denied', input);
   }
@@ -181,6 +180,9 @@ export async function prepareSource(source: RenderSource, trustedStdio = false):
       root: await fs.realpath(root), entryRelativePath: relative };
   }
   const profile: RenderProfile = trusted ? 'trusted-local' : 'public-web';
+  if (profile === 'public-web' && process.env.NODE_ENV === 'production' && process.env.STUDIO_PUBLIC_EGRESS_READY !== 'true') {
+    throw new RenderPolicyError('Public web rendering requires operator-configured network egress isolation', url);
+  }
   const parsed = await assertNetworkUrl(url, profile);
   return { profile, entryUrl: parsed.href };
 }
