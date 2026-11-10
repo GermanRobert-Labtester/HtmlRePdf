@@ -13,7 +13,7 @@ import multer from 'multer';
 import AdmZip from 'adm-zip';
 import dotenv from 'dotenv';
 import { convert, listGeneratedPdfs, previewHtml, ConvertOptions } from './lib/converter.ts';
-import { getBrowser, closeBrowser } from './lib/browser.ts';
+import { isBrowserConnected, closeBrowser } from './lib/browser.ts';
 import { handleMcpSseConnection, handleMcpPostMessage, startStdioMcpServer } from './lib/mcp.ts';
 import { optimizePrintCss } from './lib/gemini.ts';
 import { cleanBundleRelative, RenderPolicyError } from './lib/render-policy.ts';
@@ -112,10 +112,9 @@ async function startServer() {
   // Health check
   app.get('/api/health', async (_req: Request, res: Response) => {
     try {
-      const browser = await getBrowser();
       res.json({
         status: 'ok',
-        browserConnected: browser.isConnected(),
+        browserConnected: isBrowserConnected(),
         version: '1.0.0',
         timestamp: new Date().toISOString(),
         renderingProfiles: ['local-bundle', 'public-web'],
