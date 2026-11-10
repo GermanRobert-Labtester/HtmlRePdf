@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "html2pdf-studio": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "tsx",
+        "/absolute/path/to/html2pdf-studio/bin/mcp-stdio.ts"
+      ]
+    },
+    "html2pdf-studio-http": {
+      "url": "http://localhost:3000/mcp"
+    }
+  }
+}

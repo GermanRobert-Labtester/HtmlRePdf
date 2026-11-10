@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Media & Page Size Authority Fixture</title>
+  <style>
+    /* CSS @page size declaration for testing pageSizeAuthority ('css' vs 'ui') */
+    @page {
+      size: 140mm 200mm;
+      margin: 12mm;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      margin: 0;
+      padding: 16px;
+      background: #f8fafc;
+      color: #0f172a;
+    }
+
+    .badge-card {
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 16px;
+      border-width: 2px;
+      border-style: solid;
+    }
+
+    /* Screen layout rules (active when media === 'screen') */
+    .screen-banner {
+      display: block;
+      background: #eff6ff;
+      border-color: #3b82f6;
+      color: #1e40af;
+    }
+
+    .print-banner {
+      display: none;
+      background: #f0fdf4;
+      border-color: #22c55e;
+      color: #166534;
+    }
+
+    .interactive-element {
+      display: inline-block;
+      padding: 8px 14px;
+      background: #2563eb;
+      color: #ffffff;
+      border-radius: 6px;
+      font-weight: 600;
+      font-size: 13px;
+    }
+
+    /* Print media rules (active when media === 'print') */
+    @media print {
+      body {
+        background: #ffffff;
+      }
+      .screen-banner {
+        display: none !important;
+      }
+      .print-banner {
+        display: block !important;
+      }
+      .interactive-element {
+        background: #0f172a !important;
+        border: 1px solid #334155;
+      }
+    }
+
+    .info-box {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 14px;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    .info-box h3 {
+      margin-top: 0;
+      font-size: 15px;
+      color: #0f172a;
+    }
+  </style>
+</head>
+<body>
+  <div class="screen-banner badge-card" id="screen-banner">
+    <h2 style="margin: 0 0 6px 0; font-size: 18px;">🖥️ Screen Media Active</h2>
+    <p style="margin: 0; font-size: 13px;">
+      This banner is rendered specifically via <code>@media screen</code> rules. In print emulation, this element is hidden.
+    </p>
+  </div>
+
+  <div class="print-banner badge-card" id="print-banner">
+    <h2 style="margin: 0 0 6px 0; font-size: 18px;">🖨️ Print Media Active</h2>
+    <p style="margin: 0; font-size: 13px;">
+      This banner is rendered specifically via <code>@media print</code> rules. In screen mode, this element is hidden.
+    </p>
+  </div>
+
+  <div class="info-box">
+    <h3>Export Settings Authority Verification</h3>
+    <p>
+      <strong>1. Media Emulation:</strong> Toggle between <em>Print</em> and <em>Screen</em> in HTML2PDF Studio to verify that media queries are faithfully evaluated.
+    </p>
+    <p>
+      <strong>2. Page Size Authority:</strong> This fixture declares <code>@page { size: 140mm 200mm; }</code> in CSS.
+    </p>
+    <ul>
+      <li>When <strong>CSS @page</strong> authority is selected, the generated PDF page size will be exactly 140 × 200 mm.</li>
+      <li>When <strong>UI Paper Size</strong> authority is selected (e.g. A4 or US Letter), the UI paper dimensions override the CSS declaration.</li>
+    </ul>
+    <div style="margin-top: 12px;">
+      <span class="interactive-element">Status: Verified Fixture</span>
+    </div>
+  </div>
+</body>
+</html>

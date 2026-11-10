@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Invoice #INV-2026-8891</title>
+  <style>
+    @page {
+      margin: 15mm;
+      size: A4 portrait;
+    }
+    * {
+      box-sizing: border-box;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      color: #1f2937;
+      background: #ffffff;
+      line-height: 1.5;
+    }
+    .invoice-card {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      border-bottom: 2px solid #3b82f6;
+      padding-bottom: 24px;
+      margin-bottom: 28px;
+    }
+    .brand h1 {
+      margin: 0 0 6px 0;
+      font-size: 26px;
+      font-weight: 800;
+      color: #1d4ed8;
+      letter-spacing: -0.5px;
+    }
+    .brand p {
+      margin: 0;
+      color: #6b7280;
+      font-size: 13px;
+    }
+    .invoice-meta {
+      text-align: right;
+    }
+    .invoice-meta h2 {
+      margin: 0 0 6px 0;
+      font-size: 22px;
+      color: #111827;
+      letter-spacing: 1px;
+    }
+    .badge {
+      display: inline-block;
+      background: #dcfce7;
+      color: #15803d;
+      padding: 4px 12px;
+      border-radius: 9999px;
+      font-size: 12px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    .info-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 32px;
+      margin-bottom: 32px;
+    }
+    .info-box h3 {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: #9ca3af;
+      margin: 0 0 8px 0;
+    }
+    .info-box p {
+      margin: 0 0 4px 0;
+      font-size: 14px;
+      color: #374151;
+    }
+    .info-box strong {
+      color: #111827;
+      font-size: 15px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 24px;
+    }
+    thead {
+      display: table-header-group;
+    }
+    tr {
+      page-break-inside: avoid;
+    }
+    th {
+      background: #f3f4f6;
+      color: #374151;
+      text-align: left;
+      padding: 12px 14px;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    td {
+      padding: 12px 14px;
+      border-bottom: 1px solid #f3f4f6;
+      font-size: 13px;
+    }
+    td.num, th.num {
+      text-align: right;
+    }
+    .totals-area {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 16px;
+      margin-bottom: 32px;
+      page-break-inside: avoid;
+    }
+    .totals-table {
+      width: 320px;
+    }
+    .totals-table td {
+      padding: 6px 12px;
+      border: none;
+    }
+    .totals-table tr.grand-total {
+      background: #eff6ff;
+      font-weight: 700;
+      font-size: 15px;
+      color: #1d4ed8;
+      border-top: 2px solid #93c5fd;
+    }
+    .notes {
+      border-top: 1px solid #e5e7eb;
+      padding-top: 16px;
+      font-size: 12px;
+      color: #6b7280;
+      page-break-inside: avoid;
+    }
+    .notes h4 {
+      margin: 0 0 6px 0;
+      color: #374151;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <div class="invoice-card">
+    <div class="header">
+      <div class="brand">
+        <h1>Acme Cloud Solutions</h1>
+        <p>100 Innovation Way, Suite 400<br />San Francisco, CA 94105<br />billing@acmecloud.io</p>
+      </div>
+      <div class="invoice-meta">
+        <h2>INVOICE</h2>
+        <span class="badge">PAID IN FULL</span>
+        <div style="font-size: 13px; color: #4b5563;">
+          <div><strong>Invoice #:</strong> INV-2026-8891</div>
+          <div><strong>Date:</strong> November 10, 2026</div>
+          <div><strong>Due Date:</strong> November 24, 2026</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="info-grid">
+      <div class="info-box">
+        <h3>Billed To</h3>
+        <strong>Nexus Corporation Ltd.</strong>
+        <p>Attn: Financial Accounting<br />450 Market Street, Floor 18<br />London, EC2N 4AY, United Kingdom<br />VAT ID: GB 982 104 221</p>
+      </div>
+      <div class="info-box">
+        <h3>Payment Method</h3>
+        <strong>Direct Corporate Transfer</strong>
+        <p>Bank: Global Chase International<br />IBAN: GB82 CHAS 2000 0019 4821 90<br />SWIFT: CHASGB2L<br />Reference: INV-2026-8891</p>
+      </div>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Item & Description</th>
+          <th class="num">Qty</th>
+          <th class="num">Unit Price</th>
+          <th class="num">Tax</th>
+          <th class="num">Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>
+            <strong>Enterprise Cluster Node Hosting</strong><br />
+            <span style="color: #6b7280; font-size: 11px;">High-availability Kubernetes pod cluster (32 vCPU, 128GB RAM) - Month of Oct 2026</span>
+          </td>
+          <td class="num">2</td>
+          <td class="num">$1,250.00</td>
+          <td class="num">0.0%</td>
+          <td class="num">$2,500.00</td>
+        </tr>
+        <tr>
+          <td>
+            <strong>Managed PostgreSQL Enterprise Add-on</strong><br />
+            <span style="color: #6b7280; font-size: 11px;">Dedicated replica read-pool, point-in-time recovery, automated SSD tiering</span>
+          </td>
+          <td class="num">1</td>
+          <td class="num">$480.00</td>
+          <td class="num">0.0%</td>
+          <td class="num">$480.00</td>
+        </tr>
+        <tr>
+          <td>
+            <strong>Edge CDN Bandwidth & Global Acceleration</strong><br />
+            <span style="color: #6b7280; font-size: 11px;">14.2 TB egress data transfer over premium tier tier-1 transit</span>
+          </td>
+          <td class="num">1</td>
+          <td class="num">$320.00</td>
+          <td class="num">0.0%</td>
+          <td class="num">$320.00</td>
+        </tr>
+        <tr>
+          <td>
+            <strong>Premium 24/7 SLA Engineering Support</strong><br />
+            <span style="color: #6b7280; font-size: 11px;">15-minute response time guarantee with designated technical account manager</span>
+          </td>
+          <td class="num">1</td>
+          <td class="num">$650.00</td>
+          <td class="num">0.0%</td>
+          <td class="num">$650.00</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="totals-area">
+      <table class="totals-table">
+        <tr>
+          <td>Subtotal:</td>
+          <td class="num">$3,950.00</td>
+        </tr>
+        <tr>
+          <td>Applicable Tax (0% B2B Reverse):</td>
+          <td class="num">$0.00</td>
+        </tr>
+        <tr>
+          <td>Early Payment Discount:</td>
+          <td class="num">-$150.00</td>
+        </tr>
+        <tr class="grand-total">
+          <td>Total Paid:</td>
+          <td class="num">$3,800.00</td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="notes">
+      <h4>Terms & Conditions</h4>
+      <p>Thank you for your business. All services provided are subject to our Enterprise Master Services Agreement. If you have questions regarding this invoice, please reach out to billing@acmecloud.io within 14 business days.</p>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,8 @@
+{
+  "name": "Remix HTML2PDF Studio",
+  "description": "High-fidelity HTML \u0026 URL to PDF conversion, Print-to-PDF engine with live previews, and MCP server for AI clients.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

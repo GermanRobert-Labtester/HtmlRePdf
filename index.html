@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HTML2PDF Studio - High Fidelity HTML & URL to PDF Engine</title>
+    <meta name="description" content="Convert HTML and URLs into pixel-perfect PDFs with print-fidelity emulation, live preview, and MCP server support for AI clients." />
+    <meta property="og:title" content="HTML2PDF Studio - High Fidelity HTML & URL to PDF Engine" />
+    <meta property="og:description" content="Convert HTML and URLs into pixel-perfect PDFs with print-fidelity emulation, live preview, and MCP server support for AI clients." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <script>
+      // Suppress Vite HMR WebSocket errors in AI Studio iframe environment (HMR is disabled)
+      (function () {
+        var isHmrWsError = function (str) {
+          return (
+            typeof str === 'string' &&
+            (str.indexOf('WebSocket') !== -1 ||
+              str.indexOf('createWebSocketModuleRunnerTransport') !== -1 ||
+              str.indexOf('@vite/client') !== -1)
+          );
+        };
+
+        window.addEventListener(
+          'error',
+          function (e) {
+            var msg = (e && (e.message || (e.error && e.error.message))) || '';
+            var file = (e && e.filename) || '';
+            var stack = (e && e.error && e.error.stack) || '';
+            if (isHmrWsError(msg) || isHmrWsError(file) || isHmrWsError(stack)) {
+              if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+              if (e.preventDefault) e.preventDefault();
+              return true;
+            }
+          },
+          true
+        );
+
+        window.addEventListener(
+          'unhandledrejection',
+          function (e) {
+            var reason = e && e.reason;
+            var text = (reason && (reason.stack || reason.message || reason.toString())) || '';
+            if (isHmrWsError(text)) {
+              if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+              if (e.preventDefault) e.preventDefault();
+              return true;
+            }
+          },
+          true
+        );
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+
