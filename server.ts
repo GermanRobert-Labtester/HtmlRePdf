@@ -256,7 +256,7 @@ async function startServer() {
       });
     } catch (err: any) {
       console.error('[API] /api/upload error:', err);
-      res.status(500).json({ error: err.message || 'Upload processing failed' });
+      res.status(err instanceof RenderPolicyError ? 400 : 500).json({ error: err.message || 'Upload processing failed' });
     }
   });
 
