@@ -160,6 +160,8 @@ interface ConvertResult {
   fileSize: number;
   durationMs: number;
   downloadUrl: string;
+  profile?: 'local-bundle' | 'public-web' | 'trusted-local';
+  blockedResources?: { url: string; reason: string }[];
   metadata?: {
     title?: string;
     author?: string;
@@ -213,6 +215,7 @@ export default function App() {
   const [previewWidth, setPreviewWidth] = useState<'100%' | '1440px' | '768px' | '375px'>('100%');
   const [previewZoom, setPreviewZoom] = useState<number>(100);
   const [previewKey, setPreviewKey] = useState<number>(1);
+  const [blockedResources, setBlockedResources] = useState<{ url: string; reason: string }[]>([]);
 
   // Conversion options
   const [options, setOptions] = useState<ConversionOptions>({
@@ -650,7 +653,7 @@ export default function App() {
     setFieldErrors({});
 
     // Pre-validate export settings
-    const dummySource: ConvertSource = { url: 'http://localhost:3000/api/preview/test/index.html' };
+    const dummySource: ConvertSource = { url: 'https://example.com/' };
     const preCheck = buildSingleOrBatchPayload(options, dummySource, mode === 'print' ? 'print' : 'screen');
     const optionErrors = { ...preCheck.errors };
     delete optionErrors['source'];
@@ -707,7 +710,7 @@ export default function App() {
         );
         setConvertStep(`[Batch ${i + 1}/${queueSnapshot.length}] Rendering PDF for ${item.name}...`);
 
-        const itemSource: ConvertSource = { url: `http://localhost:3000${uploadData.previewUrl}` };
+        const itemSource: ConvertSource = { url: uploadData.previewUrl };
         const payload = buildSingleOrBatchPayload(options, itemSource, mode === 'print' ? 'print' : 'screen');
 
         if (!payload.isValid) {
@@ -797,10 +800,11 @@ export default function App() {
   const executeConversion = async (mode: 'convert' | 'print') => {
     setErrorMsg(null);
     setFieldErrors({});
+    setBlockedResources([]);
 
     let source: ConvertSource = {};
     if (inputMode === 'upload' && uploadedFile) {
-      source = { url: `http://localhost:3000${uploadedFile.previewUrl}` };
+      source = { url: uploadedFile.previewUrl };
     } else if (inputMode === 'url') {
       source = { url: urlInput };
     } else {
@@ -838,11 +842,13 @@ export default function App() {
           setFieldErrors(err.errors);
           focusSectionForError(Object.keys(err.errors)[0]);
         }
+        setBlockedResources(err.blockedResources || []);
         throw new Error(err.error || 'Conversion failed');
       }
 
       setConvertStep('Rendering high-fidelity vector pages...');
       const result: ConvertResult = await res.json();
+      setBlockedResources(result.blockedResources || []);
       setLastResult(result);
       setPreviewTab('pdf');
       fetchHistory();
@@ -899,6 +905,9 @@ export default function App() {
     setCopiedText(label);
     setTimeout(() => setCopiedText(null), 2500);
   };
+
+  const activeRenderProfile = lastResult?.profile || (inputMode === 'url' ? 'public-web' : 'local-bundle');
+  const rawPreviewHtml = '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; img-src data: blob:; style-src \'unsafe-inline\'; font-src data:; script-src \'none\'; connect-src \'none\'; frame-src \'none\'; object-src \'none\'; base-uri \'none\'">' + rawHtml;
 
   // Determine iframe source
   const getIframeSrc = () => {
@@ -3248,6 +3257,7 @@ export default function App() {
               </button>
             </div>
 
+            <span className="text-[11px] text-sky-300 font-mono" title="Trusted local automation is an operator-only stdio setting">Profile: {activeRenderProfile === 'public-web' ? 'Public web' : activeRenderProfile === 'trusted-local' ? 'Trusted local automation' : 'Local bundle'}</span>
             {/* Viewport Size & Zoom Controls */}
             {previewTab !== 'pdf' && (
               <div className="flex items-center gap-3">
@@ -3334,6 +3344,13 @@ export default function App() {
             )}
           </div>
 
+          {blockedResources.length > 0 && (
+            <div role="status" className="bg-amber-950/60 border-b border-amber-800 px-4 py-2 text-xs text-amber-100 max-h-28 overflow-auto">
+              <strong>{blockedResources.length} blocked resource(s):</strong> {blockedResources.map((item, index) => (
+                <div key={index} className="break-all">{item.url}: {item.reason}</div>
+              ))}
+            </div>
+          )}
           {/* Viewport Content Area */}
           <div className="flex-1 bg-slate-950 p-4 overflow-auto flex items-center justify-center relative">
             {/* Live Screen Preview */}
@@ -3355,7 +3372,7 @@ export default function App() {
                     src={getIframeSrc() || 'about:blank'}
                     className="w-full h-full border-0"
                     title="Live Upload Preview"
-                    sandbox="allow-scripts allow-same-origin"
+                    sandbox=""
                   />
                 ) : inputMode === 'url' ? (
                   <iframe
@@ -3363,14 +3380,16 @@ export default function App() {
                     src={urlInput}
                     className="w-full h-full border-0"
                     title="Live URL Preview"
+                    sandbox="allow-scripts"
+                    referrerPolicy="no-referrer"
                   />
                 ) : (
                   <iframe
                     key={`code-screen-${previewKey}`}
-                    srcDoc={rawHtml}
+                    srcDoc={rawPreviewHtml}
                     className="w-full h-full border-0"
                     title="Raw HTML Preview"
-                    sandbox="allow-scripts allow-same-origin"
+                    sandbox=""
                   />
                 )}
                 {renderWatermarkOverlay()}
@@ -3405,35 +3424,10 @@ export default function App() {
                   {/* Print emulation iframe */}
                   <iframe
                     key={`print-sim-${previewKey}`}
-                    srcDoc={`
-                      <!DOCTYPE html>
-                      <html>
-                      <head>
-                        <style>
-                          @media screen {
-                            /* Simulate print media on screen for preview */
-                            body {
-                              background: #ffffff !important;
-                              color: #000000 !important;
-                              margin: 0 !important;
-                              padding: 15mm !important;
-                              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-                            }
-                          }
-                          ${options.customCss || ''}
-                        </style>
-                      </head>
-                      <body>
-                        ${inputMode === 'code' ? rawHtml : '<div id="applet-body">Loading print document...</div>'}
-                        <script>
-                          // If loaded from URL or uploaded path, inject content
-                          if (${JSON.stringify(inputMode === 'upload' && uploadedFile ? uploadedFile.previewUrl : null)}) {
-                            window.location.href = "${uploadedFile?.previewUrl || ''}";
-                          }
-                        </script>
-                      </body>
-                      </html>
-                    `}
+                    src={inputMode === 'upload' ? getIframeSrc() || undefined : inputMode === 'url' ? urlInput : undefined}
+                    srcDoc={inputMode === 'code' ? rawPreviewHtml : undefined}
+                    sandbox={inputMode === 'url' ? 'allow-scripts' : ''}
+                    referrerPolicy="no-referrer"
                     className="w-full h-full min-h-[900px] border-0"
                     title="Print Media Emulation"
                   />
