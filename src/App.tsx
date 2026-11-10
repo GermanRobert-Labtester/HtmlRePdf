@@ -160,6 +160,8 @@ interface ConvertResult {
   fileSize: number;
   durationMs: number;
   downloadUrl: string;
+  profile?: 'local-bundle' | 'public-web' | 'trusted-local';
+  blockedResources?: { url: string; reason: string }[];
   metadata?: {
     title?: string;
     author?: string;
@@ -213,6 +215,10 @@ export default function App() {
   const [previewWidth, setPreviewWidth] = useState<'100%' | '1440px' | '768px' | '375px'>('100%');
   const [previewZoom, setPreviewZoom] = useState<number>(100);
   const [previewKey, setPreviewKey] = useState<number>(1);
+  const [blockedResources, setBlockedResources] = useState<{ url: string; reason: string }[]>([]);
+  const [publicPreviewImage, setPublicPreviewImage] = useState<string | null>(null);
+  const [publicPreviewPending, setPublicPreviewPending] = useState(false);
+  const [publicPreviewError, setPublicPreviewError] = useState<string | null>(null);
 
   // Conversion options
   const [options, setOptions] = useState<ConversionOptions>({
@@ -414,6 +420,46 @@ export default function App() {
     loadSample('invoice');
     fetchHistory();
   }, []);
+
+  // Public URL previews use the policy-enforced server screenshot, not a
+  // direct iframe that could browse private network addresses from the user's device.
+  useEffect(() => {
+    if (inputMode !== 'url' || previewTab === 'pdf') return;
+    const controller = new AbortController();
+    let active = true;
+    setPublicPreviewPending(true);
+    setPublicPreviewImage(null);
+    setPublicPreviewError(null);
+    setBlockedResources([]);
+    const timeout = setTimeout(async () => {
+      try {
+        const width = previewWidth === '375px' ? 375 : previewWidth === '768px' ? 768 : 1200;
+        const res = await fetch('/api/preview-html', {
+          method: 'POST',
+          signal: controller.signal,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            url: urlInput,
+            viewport: { width, height: 800 },
+            emulateMedia: previewTab === 'print' ? 'print' : 'screen',
+          }),
+        });
+        const data = await res.json();
+        if (!active) return;
+        setBlockedResources(data.blockedResources || []);
+        if (!res.ok) throw new Error(data.error || 'Public web preview was denied');
+        setPublicPreviewImage('data:image/png;base64,' + data.screenshotBase64);
+      } catch (err: any) {
+        if (active && !controller.signal.aborted) {
+          setPublicPreviewError(err.message || 'Public web preview failed');
+          setPublicPreviewImage(null);
+        }
+      } finally {
+        if (active) setPublicPreviewPending(false);
+      }
+    }, 500);
+    return () => { active = false; clearTimeout(timeout); controller.abort(); };
+  }, [inputMode, urlInput, previewTab, previewWidth, previewKey]);
 
   const checkHealth = async () => {
     try {
@@ -650,7 +696,7 @@ export default function App() {
     setFieldErrors({});
 
     // Pre-validate export settings
-    const dummySource: ConvertSource = { url: 'http://localhost:3000/api/preview/test/index.html' };
+    const dummySource: ConvertSource = { url: 'https://example.com/' };
     const preCheck = buildSingleOrBatchPayload(options, dummySource, mode === 'print' ? 'print' : 'screen');
     const optionErrors = { ...preCheck.errors };
     delete optionErrors['source'];
@@ -707,7 +753,7 @@ export default function App() {
         );
         setConvertStep(`[Batch ${i + 1}/${queueSnapshot.length}] Rendering PDF for ${item.name}...`);
 
-        const itemSource: ConvertSource = { url: `http://localhost:3000${uploadData.previewUrl}` };
+        const itemSource: ConvertSource = { url: uploadData.previewUrl };
         const payload = buildSingleOrBatchPayload(options, itemSource, mode === 'print' ? 'print' : 'screen');
 
         if (!payload.isValid) {
@@ -747,6 +793,7 @@ export default function App() {
     }
 
     if (lastGenerated) {
+      setBlockedResources(lastGenerated.blockedResources || []);
       setLastResult(lastGenerated);
       setPreviewTab('pdf');
       fetchHistory();
@@ -797,10 +844,11 @@ export default function App() {
   const executeConversion = async (mode: 'convert' | 'print') => {
     setErrorMsg(null);
     setFieldErrors({});
+    setBlockedResources([]);
 
     let source: ConvertSource = {};
     if (inputMode === 'upload' && uploadedFile) {
-      source = { url: `http://localhost:3000${uploadedFile.previewUrl}` };
+      source = { url: uploadedFile.previewUrl };
     } else if (inputMode === 'url') {
       source = { url: urlInput };
     } else {
@@ -838,11 +886,13 @@ export default function App() {
           setFieldErrors(err.errors);
           focusSectionForError(Object.keys(err.errors)[0]);
         }
+        setBlockedResources(err.blockedResources || []);
         throw new Error(err.error || 'Conversion failed');
       }
 
       setConvertStep('Rendering high-fidelity vector pages...');
       const result: ConvertResult = await res.json();
+      setBlockedResources(result.blockedResources || []);
       setLastResult(result);
       setPreviewTab('pdf');
       fetchHistory();
@@ -899,6 +949,10 @@ export default function App() {
     setCopiedText(label);
     setTimeout(() => setCopiedText(null), 2500);
   };
+
+  const activeRenderProfile = previewTab === 'pdf' && lastResult?.profile
+    ? lastResult.profile : (inputMode === 'url' ? 'public-web' : 'local-bundle');
+  const rawPreviewHtml = '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; img-src data: blob:; style-src \'unsafe-inline\'; font-src data:; script-src \'none\'; connect-src \'none\'; frame-src \'none\'; object-src \'none\'; base-uri \'none\'">' + rawHtml;
 
   // Determine iframe source
   const getIframeSrc = () => {
@@ -3248,6 +3302,7 @@ export default function App() {
               </button>
             </div>
 
+            <span className="text-[11px] text-sky-300 font-mono" title="Trusted local automation is an operator-only stdio setting">Profile: {activeRenderProfile === 'public-web' ? 'Public web' : activeRenderProfile === 'trusted-local' ? 'Trusted local automation' : 'Local bundle'}</span>
             {/* Viewport Size & Zoom Controls */}
             {previewTab !== 'pdf' && (
               <div className="flex items-center gap-3">
@@ -3334,6 +3389,13 @@ export default function App() {
             )}
           </div>
 
+          {blockedResources.length > 0 && (
+            <div role="status" className="bg-amber-950/60 border-b border-amber-800 px-4 py-2 text-xs text-amber-100 max-h-28 overflow-auto">
+              <strong>{blockedResources.length} blocked resource(s):</strong> {blockedResources.map((item, index) => (
+                <div key={index} className="break-all">{item.url}: {item.reason}</div>
+              ))}
+            </div>
+          )}
           {/* Viewport Content Area */}
           <div className="flex-1 bg-slate-950 p-4 overflow-auto flex items-center justify-center relative">
             {/* Live Screen Preview */}
@@ -3355,22 +3417,23 @@ export default function App() {
                     src={getIframeSrc() || 'about:blank'}
                     className="w-full h-full border-0"
                     title="Live Upload Preview"
-                    sandbox="allow-scripts allow-same-origin"
+                    sandbox=""
                   />
                 ) : inputMode === 'url' ? (
-                  <iframe
-                    key={`url-screen-${previewKey}`}
-                    src={urlInput}
-                    className="w-full h-full border-0"
-                    title="Live URL Preview"
-                  />
+                  publicPreviewImage ? (
+                    <img src={publicPreviewImage} alt="Policy-checked public web preview" className="w-full h-full object-contain object-top" />
+                  ) : (
+                    <div className="p-6 text-slate-700 text-sm text-center">
+                      {publicPreviewPending ? 'Rendering policy-checked preview…' : publicPreviewError || 'No preview'}
+                    </div>
+                  )
                 ) : (
                   <iframe
                     key={`code-screen-${previewKey}`}
-                    srcDoc={rawHtml}
+                    srcDoc={rawPreviewHtml}
                     className="w-full h-full border-0"
                     title="Raw HTML Preview"
-                    sandbox="allow-scripts allow-same-origin"
+                    sandbox=""
                   />
                 )}
                 {renderWatermarkOverlay()}
@@ -3403,40 +3466,25 @@ export default function App() {
                   className="bg-white text-slate-900 rounded-sm border border-slate-700 overflow-hidden relative"
                 >
                   {/* Print emulation iframe */}
-                  <iframe
-                    key={`print-sim-${previewKey}`}
-                    srcDoc={`
-                      <!DOCTYPE html>
-                      <html>
-                      <head>
-                        <style>
-                          @media screen {
-                            /* Simulate print media on screen for preview */
-                            body {
-                              background: #ffffff !important;
-                              color: #000000 !important;
-                              margin: 0 !important;
-                              padding: 15mm !important;
-                              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-                            }
-                          }
-                          ${options.customCss || ''}
-                        </style>
-                      </head>
-                      <body>
-                        ${inputMode === 'code' ? rawHtml : '<div id="applet-body">Loading print document...</div>'}
-                        <script>
-                          // If loaded from URL or uploaded path, inject content
-                          if (${JSON.stringify(inputMode === 'upload' && uploadedFile ? uploadedFile.previewUrl : null)}) {
-                            window.location.href = "${uploadedFile?.previewUrl || ''}";
-                          }
-                        </script>
-                      </body>
-                      </html>
-                    `}
-                    className="w-full h-full min-h-[900px] border-0"
-                    title="Print Media Emulation"
-                  />
+                  {inputMode === 'url' ? (
+                    publicPreviewImage ? (
+                      <img src={publicPreviewImage} alt="Policy-checked print media preview" className="w-full h-auto object-contain object-top" />
+                    ) : (
+                      <div className="p-6 text-slate-700 text-center text-sm">
+                        {publicPreviewPending ? 'Rendering policy-checked print preview…' : publicPreviewError || 'No preview'}
+                      </div>
+                    )
+                  ) : (
+                    <iframe
+                      key={`print-sim-${previewKey}`}
+                      src={inputMode === 'upload' ? getIframeSrc() || undefined : undefined}
+                      srcDoc={inputMode === 'code' ? rawPreviewHtml : undefined}
+                      sandbox=""
+                      referrerPolicy="no-referrer"
+                      className="w-full h-full min-h-[900px] border-0"
+                      title="Print Media Emulation"
+                    />
+                  )}
                   {renderWatermarkOverlay()}
                 </div>
               </div>

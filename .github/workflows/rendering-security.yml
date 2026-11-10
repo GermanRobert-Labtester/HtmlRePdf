@@ -1,0 +1,32 @@
+name: Rendering security boundaries
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: rendering-security-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  boundaries:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Install Chromium and system dependencies
+        run: npx playwright install --with-deps chromium
+      - name: TypeScript check
+        run: npm run lint
+      - name: Production build
+        run: npm run build
+      - name: Rendering security boundary tests
+        run: timeout --signal=TERM --kill-after=10s 150s npm run test:boundaries

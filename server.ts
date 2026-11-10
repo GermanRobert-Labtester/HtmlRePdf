@@ -13,9 +13,10 @@ import multer from 'multer';
 import AdmZip from 'adm-zip';
 import dotenv from 'dotenv';
 import { convert, listGeneratedPdfs, previewHtml, ConvertOptions } from './lib/converter.ts';
-import { getBrowser, closeBrowser } from './lib/browser.ts';
+import { isBrowserConnected, closeBrowser } from './lib/browser.ts';
 import { handleMcpSseConnection, handleMcpPostMessage, startStdioMcpServer } from './lib/mcp.ts';
 import { optimizePrintCss } from './lib/gemini.ts';
+import { cleanBundleRelative, RenderPolicyError } from './lib/render-policy.ts';
 import {
   validateAndNormalizeConvertRequest,
   formatValidationErrorsSummary,
@@ -40,6 +41,33 @@ async function startServer() {
   const app = express();
   const PORT = parseInt(process.env.PORT || '3000', 10);
   const isDev = process.env.NODE_ENV !== 'production';
+  const bindHost = process.env.STUDIO_BIND_HOST || '127.0.0.1';
+  const localOnly = bindHost === '127.0.0.1' || bindHost === '::1';
+  const restToken = process.env.STUDIO_API_TOKEN || '';
+  const proxySecret = process.env.STUDIO_PROXY_AUTH_SECRET || '';
+  if ((!isDev || !localOnly) && !restToken && !proxySecret) {
+    throw new Error('Hosted or network-bound server requires STUDIO_API_TOKEN or STUDIO_PROXY_AUTH_SECRET');
+  }
+  const allowedOrigins = new Set((process.env.STUDIO_ALLOWED_ORIGINS || '').split(',').map(x => x.trim()).filter(Boolean));
+  if (process.env.APP_URL) {
+    try { allowedOrigins.add(new URL(process.env.APP_URL).origin); } catch {}
+  }
+  if (localOnly) { allowedOrigins.add('http://localhost:' + PORT); allowedOrigins.add('http://127.0.0.1:' + PORT); }
+  const secretMatches = (provided: string | undefined, expected: string): boolean => {
+    if (!provided || !expected) return false;
+    const a = Buffer.from(provided), b = Buffer.from(expected);
+    return a.length === b.length && crypto.timingSafeEqual(a, b);
+  };
+  const apiGuard = (req: Request, res: Response, next: NextFunction) => {
+    const origin = req.get('Origin');
+    const opaquePreviewAsset = origin === 'null' && req.method === 'GET' && req.originalUrl.startsWith('/api/preview/');
+    if (origin && !allowedOrigins.has(origin) && !opaquePreviewAsset) return res.status(403).json({ error: 'Origin not allowed' });
+    if (localOnly && isDev && !restToken && !proxySecret) return next();
+    const bearer = req.get('Authorization')?.match(/^Bearer (.+)$/i)?.[1];
+    const proxy = req.get('X-Studio-Proxy-Secret');
+    if (secretMatches(bearer, restToken) || secretMatches(proxy, proxySecret)) return next();
+    return res.status(401).json({ error: 'Authentication required' });
+  };
 
   // Ensure directories exist
   const uploadsDir = path.resolve(process.cwd(), 'uploads');
@@ -48,7 +76,14 @@ async function startServer() {
   if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
 
   // Middleware
-  app.use(cors());
+  app.use(cors({
+    origin: (origin, callback) => callback(null, Boolean(origin && allowedOrigins.has(origin))),
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: false,
+  }));
+  app.use('/api', apiGuard);
+  app.use('/mcp', apiGuard);
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
@@ -69,20 +104,52 @@ async function startServer() {
   });
 
   // ---------------- REST API Endpoints ----------------
+  app.get('/api/render-policy', (_req: Request, res: Response) => {
+    res.json({ profiles: ['local-bundle', 'public-web'], trustedLocal: 'operator-only stdio',
+      detail: 'Local bundle blocks external requests. Public web denies non-public network targets.' });
+  });
 
   // Health check
   app.get('/api/health', async (_req: Request, res: Response) => {
     try {
-      const browser = await getBrowser();
       res.json({
         status: 'ok',
-        browserConnected: browser.isConnected(),
+        browserConnected: isBrowserConnected(),
         version: '1.0.0',
         timestamp: new Date().toISOString(),
+        renderingProfiles: ['local-bundle', 'public-web'],
         hasGeminiApiKey: Boolean(process.env.GEMINI_API_KEY),
       });
     } catch (err: any) {
       res.status(500).json({ status: 'error', message: err.message });
+    }
+  });
+
+  // Safe image-only UI preview for public pages: never put an arbitrary URL
+  // directly in an application-origin iframe. The same server-side request
+  // policy used for PDF/MCP rendering applies to every screenshot resource.
+  app.post('/api/preview-html', async (req: Request, res: Response) => {
+    try {
+      const source = { html: req.body?.html, url: req.body?.url, filePath: req.body?.filePath };
+      const viewport = req.body?.viewport;
+      const width = Number(viewport?.width) || 1200;
+      const height = Number(viewport?.height) || 800;
+      if (!Number.isFinite(width) || !Number.isFinite(height) ||
+          width < 320 || width > 1920 || height < 320 || height > 1600) {
+        return res.status(400).json({ error: 'Invalid preview viewport' });
+      }
+      const screenshot = await previewHtml(source, {
+        emulateMedia: req.body?.emulateMedia === 'print' ? 'print' : 'screen',
+        viewport: { width, height },
+      });
+      res.setHeader('Cache-Control', 'no-store');
+      res.json(screenshot);
+    } catch (err: any) {
+      console.error('[API] /api/preview-html error:', err);
+      res.status(err instanceof RenderPolicyError ? 403 : 500).json({
+        error: err.message || 'Preview failed',
+        blockedResources: err instanceof RenderPolicyError ? [{ url: err.url || '', reason: err.message }] : [],
+      });
     }
   });
 
@@ -104,7 +171,7 @@ async function startServer() {
       res.json(result);
     } catch (err: any) {
       console.error('[API] /api/convert error:', err);
-      res.status(500).json({ error: err.message || 'Conversion failed' });
+      res.status(err instanceof RenderPolicyError ? 403 : 500).json({ error: err.message || 'Conversion failed', blockedResources: err instanceof RenderPolicyError ? [{ url: err.url || '', reason: err.message }] : [] });
     }
   });
 
@@ -126,7 +193,7 @@ async function startServer() {
       res.json(result);
     } catch (err: any) {
       console.error('[API] /api/print-pdf error:', err);
-      res.status(500).json({ error: err.message || 'Print to PDF failed' });
+      res.status(err instanceof RenderPolicyError ? 403 : 500).json({ error: err.message || 'Print to PDF failed', blockedResources: err instanceof RenderPolicyError ? [{ url: err.url || '', reason: err.message }] : [] });
     }
   });
 
@@ -137,7 +204,7 @@ async function startServer() {
         return res.status(400).json({ error: 'No file uploaded.' });
       }
 
-      const uploadId = crypto.randomUUID().slice(0, 8);
+      const uploadId = crypto.randomUUID();
       const targetDir = path.join(uploadsDir, uploadId);
       await fsPromises.mkdir(targetDir, { recursive: true });
 
@@ -148,7 +215,26 @@ async function startServer() {
       if (originalName.endsWith('.zip')) {
         // Extract ZIP bundle safely
         const zip = new AdmZip(req.file.buffer);
-        zip.extractAllTo(targetDir, true);
+        const entries = zip.getEntries();
+        if (entries.length > 500) throw new RenderPolicyError('ZIP contains too many entries');
+        let expandedBytes = 0;
+        for (const entry of entries) {
+          const rel = cleanBundleRelative(entry.entryName.replace(/\/$/, ''));
+          const fileType = (entry.attr >>> 16) & 0o170000;
+          if (fileType === 0o120000) throw new RenderPolicyError('ZIP symbolic links are not allowed', rel);
+          if (entry.isDirectory) continue;
+          expandedBytes += entry.header.size;
+          if (expandedBytes > 100 * 1024 * 1024 ||
+              (entry.header.size > 1024 * 1024 && entry.header.size > Math.max(1, entry.header.compressedSize) * 150)) {
+            throw new RenderPolicyError('ZIP extraction limit exceeded', rel);
+          }
+          const out = path.resolve(targetDir, rel);
+          if (!out.startsWith(targetDir + path.sep)) throw new RenderPolicyError('ZIP path traversal denied', rel);
+          await fsPromises.mkdir(path.dirname(out), { recursive: true });
+          const data = entry.getData();
+          if (data.length !== entry.header.size) throw new RenderPolicyError('ZIP entry size mismatch', rel);
+          await fsPromises.writeFile(out, data, { flag: 'wx' });
+        }
 
         // Find index.html or first .html file
         const findHtmlFiles = (dir: string): string[] => {
@@ -193,32 +279,33 @@ async function startServer() {
         id: uploadId,
         fileName: req.file.originalname,
         previewUrl,
-        fullDiskPath,
         rawHtml,
         mainFile: mainHtmlFile,
         assetCount,
       });
     } catch (err: any) {
       console.error('[API] /api/upload error:', err);
-      res.status(500).json({ error: err.message || 'Upload processing failed' });
+      res.status(err instanceof RenderPolicyError ? 400 : 500).json({ error: err.message || 'Upload processing failed' });
     }
   });
 
-  // Serve uploaded HTML & relative assets for sandboxed live iframe preview
+  // Uploaded documents are opaque-origin, scriptless even when opened directly.
+  // A dedicated preview hostname is preferable for hosted installations.
   app.use('/api/preview/:id', (req: Request, res: Response, next: NextFunction) => {
     const uploadId = req.params.id;
+    if (!/^[a-f0-9-]{36}$/.test(uploadId)) return res.status(400).send('Invalid bundle id');
     const targetDir = path.join(uploadsDir, uploadId);
-
-    if (!fs.existsSync(targetDir)) {
-      return res.status(404).send('Preview upload session not found');
-    }
-
-    // Set permissive CORS and sandboxing headers so assets load in iframe safely
-    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    if (!fs.existsSync(targetDir)) return res.status(404).send('Preview upload session not found');
+    res.setHeader('Content-Security-Policy',
+      "sandbox; default-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; script-src 'none'; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'");
     res.setHeader('X-Frame-Options', 'SAMEORIGIN');
-
-    // Use express.static on the upload directory
-    express.static(targetDir, { index: 'index.html' })(req, res, next);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    // An iframe with CSP sandbox has an opaque origin; allow its own static assets.
+    // Authentication still applies to these unpredictable bundle URLs.
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    res.setHeader('Access-Control-Allow-Origin', 'null');
+    res.setHeader('Cache-Control', 'no-store');
+    express.static(targetDir, { index: 'index.html', dotfiles: 'deny', fallthrough: false })(req, res, next);
   });
 
   // Download generated PDF as attachment
@@ -297,7 +384,7 @@ async function startServer() {
     }
   }
 
-  const server = app.listen(PORT, '0.0.0.0', () => {
+  const server = app.listen(PORT, bindHost, () => {
     console.log(`=================================================`);
     console.log(`🚀 HTML2PDF Studio live at: http://localhost:${PORT}`);
     console.log(`📡 MCP SSE endpoint ready:  http://localhost:${PORT}/mcp`);
