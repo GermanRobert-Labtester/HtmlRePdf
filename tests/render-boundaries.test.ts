@@ -162,6 +162,15 @@ test('hosted REST/MCP require server-side credentials; uploaded scripts cannot a
     assert.match(asset.headers.get('content-security-policy') || '', /sandbox;.*script-src 'none'/);
     assert.ok(!('fullDiskPath' in info), 'Physical filesystem paths must not be returned');
 
+    const linkedBundle = new AdmZip();
+    linkedBundle.addFile('index.html', Buffer.from('<link rel="stylesheet" href="theme.css"><h1 id="linked">Bundle CSS</h1>'));
+    linkedBundle.addFile('theme.css', Buffer.from('h1 { color: rgb(0, 128, 0) }'));
+    const zipForm = new FormData();
+    zipForm.append('file', new File([Uint8Array.from(linkedBundle.toBuffer()).buffer as ArrayBuffer], 'bundle.zip'));
+    const zipResponse = await fetch(base + '/api/upload', { method: 'POST', headers, body: zipForm });
+    assert.equal(zipResponse.status, 200);
+    const linked = await zipResponse.json() as { previewUrl: string };
+
     const browser = await chromium.launch({ headless: true });
     try {
       const context = await browser.newContext({ extraHTTPHeaders: headers });
@@ -174,6 +183,16 @@ test('hosted REST/MCP require server-side credentials; uploaded scripts cannot a
       }, base + info.previewUrl);
       await page.waitForTimeout(800);
       assert.equal(await page.evaluate(() => document.body.dataset.compromised), 'false');
+      await page.evaluate(url => {
+        const frame = document.createElement('iframe');
+        frame.id = 'bundle'; frame.src = url; frame.sandbox.value = '';
+        document.body.appendChild(frame);
+      }, base + linked.previewUrl);
+      await page.frameLocator('iframe#bundle').locator('#linked').waitFor();
+      const color = await page.frameLocator('iframe#bundle').locator('#linked')
+        .evaluate(node => getComputedStyle(node).color);
+      assert.equal(color, 'rgb(0, 128, 0)', 'Bundled CSS must load in opaque-origin preview iframe');
+
       await context.close();
     } finally { await browser.close(); }
 
