@@ -28,26 +28,29 @@ export class RenderPolicyError extends Error {
   }
 }
 
-const forbidden = new BlockList();
+// Keep address families separate: Node's BlockList normalizes IPv4 to IPv4-mapped
+// IPv6, so a mapped-range IPv6 rule in a shared blocklist would deny ALL IPv4.
+const forbidden4 = new BlockList();
+const forbidden6 = new BlockList();
 for (const [address, prefix] of [
   ['0.0.0.0', 8], ['10.0.0.0', 8], ['100.64.0.0', 10],
   ['127.0.0.0', 8], ['169.254.0.0', 16], ['172.16.0.0', 12],
   ['192.0.0.0', 24], ['192.0.2.0', 24], ['192.168.0.0', 16],
   ['198.18.0.0', 15], ['198.51.100.0', 24], ['203.0.113.0', 24],
   ['224.0.0.0', 4], ['240.0.0.0', 4],
-] as const) forbidden.addSubnet(address, prefix, 'ipv4');
+] as const) forbidden4.addSubnet(address, prefix, 'ipv4');
 for (const [address, prefix] of [
   ['::', 128], ['::1', 128], ['::ffff:0:0', 96], ['fc00::', 7],
   ['fe80::', 10], ['ff00::', 8], ['2001::', 23],
   ['2001:db8::', 32], ['2002::', 16],
-] as const) forbidden.addSubnet(address, prefix, 'ipv6');
+] as const) forbidden6.addSubnet(address, prefix, 'ipv6');
 
 export function isPublicAddress(ip: string): boolean {
   const version = isIP(ip);
-  if (version === 4) return !forbidden.check(ip, 'ipv4');
+  if (version === 4) return !forbidden4.check(ip, 'ipv4');
   if (version === 6) {
     // Only unicast global IPv6 is eligible, then remove special-use networks.
-    return forbidden.check(ip, 'ipv6') === false &&
+    return forbidden6.check(ip, 'ipv6') === false &&
       new BlockListWithGlobalIPv6().check(ip);
   }
   return false;
@@ -101,6 +104,7 @@ export function cleanBundleRelative(raw: string): string {
   if (!raw || raw.includes('\0') || raw.includes('\\') || raw.startsWith('/')) {
     throw new RenderPolicyError('Invalid local asset path', raw);
   }
+  if (/%2f|%5c/i.test(raw)) throw new RenderPolicyError('Encoded path separators forbidden', raw);
   let decoded: string;
   try { decoded = decodeURIComponent(raw); } catch { throw new RenderPolicyError('Malformed local asset path', raw); }
   if (decoded.includes('%') || decoded.includes('\\') || decoded.includes('\0') || decoded.startsWith('/') ||
