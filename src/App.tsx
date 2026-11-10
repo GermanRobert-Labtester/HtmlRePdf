@@ -750,6 +750,7 @@ export default function App() {
     }
 
     if (lastGenerated) {
+      setBlockedResources(lastGenerated.blockedResources || []);
       setLastResult(lastGenerated);
       setPreviewTab('pdf');
       fetchHistory();
@@ -906,7 +907,8 @@ export default function App() {
     setTimeout(() => setCopiedText(null), 2500);
   };
 
-  const activeRenderProfile = lastResult?.profile || (inputMode === 'url' ? 'public-web' : 'local-bundle');
+  const activeRenderProfile = previewTab === 'pdf' && lastResult?.profile
+    ? lastResult.profile : (inputMode === 'url' ? 'public-web' : 'local-bundle');
   const rawPreviewHtml = '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; img-src data: blob:; style-src \'unsafe-inline\'; font-src data:; script-src \'none\'; connect-src \'none\'; frame-src \'none\'; object-src \'none\'; base-uri \'none\'">' + rawHtml;
 
   // Determine iframe source
