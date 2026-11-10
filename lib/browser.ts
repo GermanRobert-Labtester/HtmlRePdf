@@ -46,7 +46,7 @@ function safeDisplayUrl(raw: string): string {
   try { const u = new URL(raw); return u.origin + u.pathname; }
   catch { return raw.slice(0, 160); }
 }
-async function fetchPublicRoute(route: Route, profile: RenderProfile): Promise<void> {
+export async function fetchPublicRoute(route: Route, profile: RenderProfile): Promise<void> {
   // Route.fetch is explicitly configured not to follow redirects. Every hop,
   // including subresource redirects, is validated before another fetch.
   let current = route.request().url();
@@ -85,7 +85,7 @@ export async function createRenderPage(options: {
     deviceScaleFactor: options.deviceScaleFactor || 2,
     ignoreHTTPSErrors: false,
     bypassCSP: false,
-    javaScriptEnabled: prepared.profile !== 'local-bundle' && !prepared.html,
+    javaScriptEnabled: prepared.profile !== 'local-bundle',
     serviceWorkers: 'block',
     acceptDownloads: false,
   });
@@ -118,7 +118,9 @@ export async function createRenderPage(options: {
             status: 200, body: bytes,
             contentType: MIME[path.extname(relative).toLowerCase()] || 'application/octet-stream',
             headers: {
-              'Content-Security-Policy': OFFLINE_CSP,
+              'Content-Security-Policy': prepared.profile === 'trusted-local'
+                ? "default-src 'self' data: http: https:; img-src 'self' data: http: https:; style-src 'self' 'unsafe-inline' http: https:; font-src 'self' data: http: https:; script-src 'self' 'unsafe-inline' http: https:; connect-src http: https:; object-src 'none'"
+                : OFFLINE_CSP,
               'X-Content-Type-Options': 'nosniff',
             },
           });
