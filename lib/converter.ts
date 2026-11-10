@@ -86,6 +86,8 @@ export interface ConvertResult {
   durationMs: number;
   downloadUrl: string;
   metadata?: PdfMetadata;
+  profile: import('./render-policy.ts').RenderProfile;
+  blockedResources: import('./render-policy.ts').BlockedResource[];
 }
 
 export interface PreviewResult {
@@ -94,6 +96,8 @@ export interface PreviewResult {
   consoleErrors: string[];
   consoleLogs: string[];
   durationMs: number;
+  profile: import('./render-policy.ts').RenderProfile;
+  blockedResources: import('./render-policy.ts').BlockedResource[];
 }
 
 const OUTPUT_DIR = path.resolve(process.cwd(), 'output');
@@ -183,7 +187,8 @@ export function formatChromiumTemplate(rawTemplate?: string, defaultFontSize = '
 export async function convert(
   source: ConvertSource,
   options: ConvertOptions = {},
-  mode: 'convert' | 'print' = 'convert'
+  mode: 'convert' | 'print' = 'convert',
+  trustedStdio = false
 ): Promise<ConvertResult> {
   const startTime = Date.now();
   const effectiveMedia: 'screen' | 'print' =
@@ -193,37 +198,14 @@ export async function convert(
       ? 'print'
       : 'screen';
 
-  const { page, cleanup } = await createRenderPage({
-    deviceScaleFactor: 2,
+  const { page, cleanup, entryUrl, profile, blockedResources } = await createRenderPage({
+    source, trustedStdio, deviceScaleFactor: 2,
     emulateMedia: effectiveMedia,
   });
 
   try {
-    // 1. Navigate or load content
-    if (source.url) {
-      console.log(`[Converter] Loading URL: ${source.url}`);
-      await page.goto(source.url, {
-        waitUntil: 'domcontentloaded',
-        timeout: 30000,
-      });
-    } else if (source.filePath) {
-      const absPath = path.isAbsolute(source.filePath)
-        ? source.filePath
-        : path.resolve(process.cwd(), source.filePath);
-      console.log(`[Converter] Loading file path: ${absPath}`);
-      await page.goto(`file://${absPath}`, {
-        waitUntil: 'domcontentloaded',
-        timeout: 30000,
-      });
-    } else if (source.html !== undefined) {
-      console.log('[Converter] Setting raw HTML content');
-      await page.setContent(source.html, {
-        waitUntil: 'domcontentloaded',
-        timeout: 30000,
-      });
-    } else {
-      throw new Error('Invalid input: Provide either "html", "filePath", or "url".');
-    }
+    // 1. Open only the policy-approved virtual bundle or validated web URL.
+    await page.goto(entryUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
 
     // 2. Wait for networkidle (with graceful timeout in case of streaming/analytics requests)
     try {
@@ -438,6 +420,8 @@ export async function convert(
       durationMs,
       downloadUrl: `/api/download/${fileName}`,
       metadata: options.metadata,
+      profile,
+      blockedResources,
     };
   } finally {
     await cleanup();
@@ -455,13 +439,15 @@ export async function previewHtml(
     emulateMedia?: 'screen' | 'print';
     css?: string;
     watermark?: WatermarkOptions;
-  } = {}
+  } = {},
+  trustedStdio = false
 ): Promise<PreviewResult> {
   const startTime = Date.now();
   const consoleErrors: string[] = [];
   const consoleLogs: string[] = [];
 
-  const { page, cleanup } = await createRenderPage({
+  const { page, cleanup, entryUrl, profile, blockedResources } = await createRenderPage({
+    source, trustedStdio,
     viewport: options.viewport || { width: 1200, height: 800 },
     deviceScaleFactor: 2,
     emulateMedia: options.emulateMedia,
@@ -480,18 +466,7 @@ export async function previewHtml(
   });
 
   try {
-    if (source.url) {
-      await page.goto(source.url, { waitUntil: 'domcontentloaded', timeout: 25000 });
-    } else if (source.filePath) {
-      const absPath = path.isAbsolute(source.filePath)
-        ? source.filePath
-        : path.resolve(process.cwd(), source.filePath);
-      await page.goto(`file://${absPath}`, { waitUntil: 'domcontentloaded', timeout: 25000 });
-    } else if (source.html !== undefined) {
-      await page.setContent(source.html, { waitUntil: 'domcontentloaded', timeout: 25000 });
-    } else {
-      throw new Error('Invalid input: Provide html, filePath, or url.');
-    }
+    await page.goto(entryUrl, { waitUntil: 'domcontentloaded', timeout: 25000 });
 
     try {
       await page.waitForLoadState('networkidle', { timeout: 5000 });
@@ -521,6 +496,8 @@ export async function previewHtml(
       consoleErrors,
       consoleLogs: consoleLogs.slice(-20),
       durationMs: Date.now() - startTime,
+      profile,
+      blockedResources,
     };
   } finally {
     await cleanup();
