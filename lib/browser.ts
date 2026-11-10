@@ -94,6 +94,7 @@ export async function createRenderPage(options: {
     serviceWorkers: 'block',
     acceptDownloads: false,
   });
+  console.info('[Render] Isolated context created');
   const blockedResources: BlockedResource[] = [];
   const blocked = (url: string, reason: string) => {
     const display = safeDisplayUrl(url);
@@ -141,7 +142,9 @@ export async function createRenderPage(options: {
         await route.abort('blockedbyclient').catch(() => {});
       }
     });
+    console.info('[Render] Request interception attached');
     const page = await context.newPage();
+    console.info('[Render] Page created');
     page.on('requestfailed', request => {
       const reason = request.failure()?.errorText || 'Browser blocked or failed this request';
       blocked(request.url(), reason);
@@ -153,6 +156,7 @@ export async function createRenderPage(options: {
     const cleanup = async () => {
       await context.close().catch(() => {});
     };
+    console.info('[Render] Page policies attached');
     return { context, page, cleanup, entryUrl: prepared.entryUrl, profile: prepared.profile, blockedResources };
   } catch (error) {
     await context.close().catch(() => {});
