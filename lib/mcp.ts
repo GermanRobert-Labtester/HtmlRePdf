@@ -22,7 +22,7 @@ import {
 /**
  * Creates an instance of the MCP Server configured with all HTML2PDF Studio tools.
  */
-export function createMcpServer(): Server {
+export function createMcpServer(trustedStdio = false): Server {
   const server = new Server(
     {
       name: 'html2pdf-studio',
@@ -393,7 +393,7 @@ export function createMcpServer(): Server {
         }
 
         const { source, options } = validation.data!;
-        const result = await convert(source, options, mode);
+        const result = await convert(source, options, mode, trustedStdio);
 
         return {
           content: [
@@ -411,6 +411,8 @@ export function createMcpServer(): Server {
                   fileSizeBytes: result.fileSize,
                   durationMs: result.durationMs,
                   downloadUrl: result.downloadUrl,
+                  profile: result.profile,
+                  blockedResources: result.blockedResources,
                   warnings: validation.warnings.length > 0 ? validation.warnings : undefined,
                 },
                 null,
@@ -454,14 +456,15 @@ export function createMcpServer(): Server {
               height: viewportHeight || 800,
             },
             css,
-          }
+          },
+          trustedStdio
         );
 
         return {
           content: [
             {
               type: 'text',
-              text: `Preview captured successfully: "${preview.title}" (${preview.durationMs}ms). Console errors: ${
+              text: `Preview captured successfully: "${preview.title}" (${preview.durationMs}ms). Profile: ${preview.profile}. Blocked resources: ${JSON.stringify(preview.blockedResources)}. Console errors: ${
                 preview.consoleErrors.length > 0 ? preview.consoleErrors.join(', ') : 'None'
               }`,
             },
@@ -516,7 +519,7 @@ export function createMcpServer(): Server {
  * Starts the stdio transport MCP server (used when spawned via CLI or Claude Desktop config).
  */
 export async function startStdioMcpServer(): Promise<void> {
-  const server = createMcpServer();
+  const server = createMcpServer(true);
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error('[MCP] Stdio transport active and connected.');
