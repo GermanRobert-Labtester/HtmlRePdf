@@ -10,7 +10,8 @@
     "postinstall": "playwright install chromium",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test:boundaries": "tsx --test tests/render-boundaries.test.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
