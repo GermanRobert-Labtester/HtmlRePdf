@@ -19,7 +19,7 @@
 
 3. **Full-Featured Web Studio UI**:
    - Drag-and-drop zone for `.html`, `.htm`, and `.zip` archives (extracts and resolves relative CSS/images automatically).
-   - In-browser sandboxed live iframe preview with responsive viewport presets (Desktop 1440px, Tablet 768px, Mobile 375px) and Zoom controls (50% to 175%).
+   - Opaque-origin, script-disabled local live previews and policy-validated screenshot previews for public URLs with responsive viewport presets (Desktop 1440px, Tablet 768px, Mobile 375px) and Zoom controls (50% to 175%).
    - Conversion options panel: page sizes (A4, A3, Letter, Legal, Tabloid, custom mm), margins, scale (50–200%), background graphics, header/footer templates with `pageNumber` / `totalPages` tokens, and custom CSS injection.
    - Embedded PDF viewer with instant download and local path copying.
 
