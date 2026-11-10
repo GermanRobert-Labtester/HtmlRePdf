@@ -29,4 +29,4 @@ jobs:
       - name: Production build
         run: npm run build
       - name: Rendering security boundary tests
-        run: npm run test:boundaries
+        run: timeout --signal=TERM --kill-after=10s 150s npm run test:boundaries
