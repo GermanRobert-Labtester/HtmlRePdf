@@ -125,6 +125,34 @@ async function startServer() {
     }
   });
 
+  // Safe image-only UI preview for public pages: never put an arbitrary URL
+  // directly in an application-origin iframe. The same server-side request
+  // policy used for PDF/MCP rendering applies to every screenshot resource.
+  app.post('/api/preview-html', async (req: Request, res: Response) => {
+    try {
+      const source = { html: req.body?.html, url: req.body?.url, filePath: req.body?.filePath };
+      const viewport = req.body?.viewport;
+      const width = Number(viewport?.width) || 1200;
+      const height = Number(viewport?.height) || 800;
+      if (!Number.isFinite(width) || !Number.isFinite(height) ||
+          width < 320 || width > 1920 || height < 320 || height > 1600) {
+        return res.status(400).json({ error: 'Invalid preview viewport' });
+      }
+      const screenshot = await previewHtml(source, {
+        emulateMedia: req.body?.emulateMedia === 'print' ? 'print' : 'screen',
+        viewport: { width, height },
+      });
+      res.setHeader('Cache-Control', 'no-store');
+      res.json(screenshot);
+    } catch (err: any) {
+      console.error('[API] /api/preview-html error:', err);
+      res.status(err instanceof RenderPolicyError ? 403 : 500).json({
+        error: err.message || 'Preview failed',
+        blockedResources: err instanceof RenderPolicyError ? [{ url: err.url || '', reason: err.message }] : [],
+      });
+    }
+  });
+
   // Convert HTML / URL / File to PDF
   app.post('/api/convert', async (req: Request, res: Response) => {
     try {
