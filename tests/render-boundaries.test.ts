@@ -176,6 +176,19 @@ test('hosted REST/MCP require server-side credentials; uploaded scripts cannot a
     assert.equal(zipResponse.status, 200);
     const linked = await zipResponse.json() as { previewUrl: string };
 
+    const conversion = await fetch(base + '/api/convert', {
+      signal: AbortSignal.timeout(20_000),
+      method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: info.previewUrl, options: { pageSize: 'A4' } }),
+    }).catch(err => { throw new Error('Hosted PDF conversion request failed: ' + String(err) + '\nServer output:\n' + serverDiagnostics); });
+    assert.equal(conversion.status, 200, await conversion.text().catch(() => '') + '\nServer output:\n' + serverDiagnostics);
+    const bad = await fetch(base + '/api/convert', {
+      method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: 'http://127.0.0.1/private' }),
+    });
+    assert.equal(bad.status, 403);
+
+
     const browser = await chromium.launch({ headless: true });
     try {
       const context = await browser.newContext({ extraHTTPHeaders: headers });
@@ -201,17 +214,6 @@ test('hosted REST/MCP require server-side credentials; uploaded scripts cannot a
       await context.close();
     } finally { await browser.close(); }
 
-    const conversion = await fetch(base + '/api/convert', {
-      signal: AbortSignal.timeout(20_000),
-      method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url: info.previewUrl, options: { pageSize: 'A4' } }),
-    }).catch(err => { throw new Error('Hosted PDF conversion request failed: ' + String(err) + '\nServer output:\n' + serverDiagnostics); });
-    assert.equal(conversion.status, 200, await conversion.text().catch(() => '') + '\nServer output:\n' + serverDiagnostics);
-    const bad = await fetch(base + '/api/convert', {
-      method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url: 'http://127.0.0.1/private' }),
-    });
-    assert.equal(bad.status, 403);
 
     const zip = new AdmZip();
     zip.addFile('../escape.html', Buffer.from('bad'));
