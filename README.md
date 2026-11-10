@@ -323,3 +323,9 @@ h1, h2, h3, h4, h5, h6 {
 
 ## 📄 License
 Apache-2.0
+
+---
+
+## Rendering profiles and security
+
+See [Rendering profiles, API authentication, sandboxing and egress requirements](docs/RENDERING_SECURITY.md). Production public-web rendering requires network-level egress filtering; application request interception is not sufficient to defeat DNS rebinding.
