@@ -125,7 +125,7 @@ async function freePort(): Promise<number> {
   return address.port;
 }
 
-test('hosted REST/MCP require server-side credentials; uploaded scripts cannot access application origin', async () => {
+test('hosted REST/MCP require server-side credentials; uploaded scripts cannot access application origin', { timeout: 120_000 }, async () => {
   const port = await freePort();
   const token = 'test-secret-credential';
   const base = 'http://127.0.0.1:' + port;
@@ -215,7 +215,10 @@ test('hosted REST/MCP require server-side credentials; uploaded scripts cannot a
     assert.ok(denied.status >= 400);
   } finally {
     child.kill('SIGTERM');
-    await new Promise<void>(resolve => { if (child.exitCode !== null) resolve(); else child.once('exit', () => resolve()); });
+    await Promise.race([
+      new Promise<void>(resolve => { if (child.exitCode !== null) resolve(); else child.once('exit', () => resolve()); }),
+      new Promise<void>(resolve => setTimeout(() => { child.kill('SIGKILL'); resolve(); }, 3000)),
+    ]);
     await closeBrowser();
   }
 });
