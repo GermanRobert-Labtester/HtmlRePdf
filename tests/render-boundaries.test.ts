@@ -125,16 +125,20 @@ async function freePort(): Promise<number> {
   return address.port;
 }
 
-test('hosted REST/MCP require server-side credentials; uploaded scripts cannot access application origin', { timeout: 120_000 }, async () => {
+test('hosted REST/MCP require server-side credentials; uploaded scripts cannot access application origin', { timeout: 90_000 }, async () => {
   const port = await freePort();
   const token = 'test-secret-credential';
   const base = 'http://127.0.0.1:' + port;
+  let serverDiagnostics = '';
   const child = spawn(path.resolve('node_modules/.bin/tsx'), ['server.ts'], {
     cwd: process.cwd(), env: { ...process.env, PORT: String(port), NODE_ENV: 'production',
       STUDIO_BIND_HOST: '127.0.0.1', STUDIO_API_TOKEN: token,
       STUDIO_PUBLIC_EGRESS_READY: 'false', APP_URL: base },
-    stdio: 'ignore',
+    stdio: ['ignore', 'pipe', 'pipe'],
   });
+  const capture = (chunk: Buffer) => { serverDiagnostics = (serverDiagnostics + chunk.toString('utf8')).slice(-10000); };
+  child.stdout?.on('data', capture);
+  child.stderr?.on('data', capture);
   const headers = { Authorization: 'Bearer ' + token };
   try {
     let started = false;
@@ -197,10 +201,11 @@ test('hosted REST/MCP require server-side credentials; uploaded scripts cannot a
     } finally { await browser.close(); }
 
     const conversion = await fetch(base + '/api/convert', {
+      signal: AbortSignal.timeout(20_000),
       method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
       body: JSON.stringify({ url: info.previewUrl, options: { pageSize: 'A4' } }),
-    });
-    assert.equal(conversion.status, 200, await conversion.text().catch(() => ''));
+    }).catch(err => { throw new Error('Hosted PDF conversion request failed: ' + String(err) + '\nServer output:\n' + serverDiagnostics); });
+    assert.equal(conversion.status, 200, await conversion.text().catch(() => '') + '\nServer output:\n' + serverDiagnostics);
     const bad = await fetch(base + '/api/convert', {
       method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
       body: JSON.stringify({ url: 'http://127.0.0.1/private' }),
