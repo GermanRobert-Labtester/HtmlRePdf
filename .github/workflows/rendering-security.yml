@@ -1,8 +1,12 @@
 name: Rendering security boundaries
 on:
   push:
-    branches: [main, "security/**"]
+    branches: [main]
   pull_request:
+
+concurrency:
+  group: rendering-security-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
