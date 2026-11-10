@@ -48,7 +48,7 @@ test('redirect target is validated before following, including for subresources'
 
 test('bundle path canonicalization rejects traversal, double-encoding and unsupported paths', async () => {
   for (const bad of ['../secret', 'a/../secret', '%2e%2e/secret', '%252e%252e/secret',
-    'a\secret', '/etc/passwd', 'C:/windows', 'a//b', 'a/./b', 'a%2fb']) {
+    'a\\secret', '/etc/passwd', 'C:/windows', 'a//b', 'a/./b', 'a%2fb']) {
     assert.throws(() => cleanBundleRelative(bad), RenderPolicyError, bad);
   }
   assert.equal(cleanBundleRelative('assets/image%20file.png'), 'assets/image file.png');
