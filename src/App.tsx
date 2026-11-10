@@ -216,6 +216,9 @@ export default function App() {
   const [previewZoom, setPreviewZoom] = useState<number>(100);
   const [previewKey, setPreviewKey] = useState<number>(1);
   const [blockedResources, setBlockedResources] = useState<{ url: string; reason: string }[]>([]);
+  const [publicPreviewImage, setPublicPreviewImage] = useState<string | null>(null);
+  const [publicPreviewPending, setPublicPreviewPending] = useState(false);
+  const [publicPreviewError, setPublicPreviewError] = useState<string | null>(null);
 
   // Conversion options
   const [options, setOptions] = useState<ConversionOptions>({
@@ -417,6 +420,46 @@ export default function App() {
     loadSample('invoice');
     fetchHistory();
   }, []);
+
+  // Public URL previews use the policy-enforced server screenshot, not a
+  // direct iframe that could browse private network addresses from the user's device.
+  useEffect(() => {
+    if (inputMode !== 'url' || previewTab === 'pdf') return;
+    const controller = new AbortController();
+    let active = true;
+    setPublicPreviewPending(true);
+    setPublicPreviewImage(null);
+    setPublicPreviewError(null);
+    setBlockedResources([]);
+    const timeout = setTimeout(async () => {
+      try {
+        const width = previewWidth === '375px' ? 375 : previewWidth === '768px' ? 768 : 1200;
+        const res = await fetch('/api/preview-html', {
+          method: 'POST',
+          signal: controller.signal,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            url: urlInput,
+            viewport: { width, height: 800 },
+            emulateMedia: previewTab === 'print' ? 'print' : 'screen',
+          }),
+        });
+        const data = await res.json();
+        if (!active) return;
+        setBlockedResources(data.blockedResources || []);
+        if (!res.ok) throw new Error(data.error || 'Public web preview was denied');
+        setPublicPreviewImage('data:image/png;base64,' + data.screenshotBase64);
+      } catch (err: any) {
+        if (active && !controller.signal.aborted) {
+          setPublicPreviewError(err.message || 'Public web preview failed');
+          setPublicPreviewImage(null);
+        }
+      } finally {
+        if (active) setPublicPreviewPending(false);
+      }
+    }, 500);
+    return () => { active = false; clearTimeout(timeout); controller.abort(); };
+  }, [inputMode, urlInput, previewTab, previewWidth, previewKey]);
 
   const checkHealth = async () => {
     try {
@@ -3377,14 +3420,13 @@ export default function App() {
                     sandbox=""
                   />
                 ) : inputMode === 'url' ? (
-                  <iframe
-                    key={`url-screen-${previewKey}`}
-                    src={urlInput}
-                    className="w-full h-full border-0"
-                    title="Live URL Preview"
-                    sandbox="allow-scripts"
-                    referrerPolicy="no-referrer"
-                  />
+                  publicPreviewImage ? (
+                    <img src={publicPreviewImage} alt="Policy-checked public web preview" className="w-full h-full object-contain object-top" />
+                  ) : (
+                    <div className="p-6 text-slate-700 text-sm text-center">
+                      {publicPreviewPending ? 'Rendering policy-checked preview…' : publicPreviewError || 'No preview'}
+                    </div>
+                  )
                 ) : (
                   <iframe
                     key={`code-screen-${previewKey}`}
@@ -3424,15 +3466,25 @@ export default function App() {
                   className="bg-white text-slate-900 rounded-sm border border-slate-700 overflow-hidden relative"
                 >
                   {/* Print emulation iframe */}
-                  <iframe
-                    key={`print-sim-${previewKey}`}
-                    src={inputMode === 'upload' ? getIframeSrc() || undefined : inputMode === 'url' ? urlInput : undefined}
-                    srcDoc={inputMode === 'code' ? rawPreviewHtml : undefined}
-                    sandbox={inputMode === 'url' ? 'allow-scripts' : ''}
-                    referrerPolicy="no-referrer"
-                    className="w-full h-full min-h-[900px] border-0"
-                    title="Print Media Emulation"
-                  />
+                  {inputMode === 'url' ? (
+                    publicPreviewImage ? (
+                      <img src={publicPreviewImage} alt="Policy-checked print media preview" className="w-full h-auto object-contain object-top" />
+                    ) : (
+                      <div className="p-6 text-slate-700 text-center text-sm">
+                        {publicPreviewPending ? 'Rendering policy-checked print preview…' : publicPreviewError || 'No preview'}
+                      </div>
+                    )
+                  ) : (
+                    <iframe
+                      key={`print-sim-${previewKey}`}
+                      src={inputMode === 'upload' ? getIframeSrc() || undefined : undefined}
+                      srcDoc={inputMode === 'code' ? rawPreviewHtml : undefined}
+                      sandbox=""
+                      referrerPolicy="no-referrer"
+                      className="w-full h-full min-h-[900px] border-0"
+                      title="Print Media Emulation"
+                    />
+                  )}
                   {renderWatermarkOverlay()}
                 </div>
               </div>
