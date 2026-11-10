@@ -23,10 +23,12 @@ export async function getBrowser(): Promise<Browser> {
   if (browserInstance?.isConnected()) return browserInstance;
   if (launchPromise) return launchPromise;
   launchPromise = (async () => {
+    console.info('[Browser] Launching headless Chromium');
     if (browserInstance) await browserInstance.close().catch(() => {});
     const browser = await chromium.launch({ headless: true, args: CHROMIUM_ARGS });
     browser.on('disconnected', () => { browserInstance = null; });
     browserInstance = browser;
+    console.info('[Browser] Chromium launched');
     return browser;
   })();
   try { return await launchPromise; }
@@ -78,8 +80,11 @@ export async function createRenderPage(options: {
   context: BrowserContext; page: Page; cleanup: () => Promise<void>;
   entryUrl: string; profile: RenderProfile; blockedResources: BlockedResource[];
 }> {
+  console.info('[Render] Validating source and profile');
   const prepared = await prepareSource(options.source, options.trustedStdio === true);
+  console.info('[Render] Selected profile: ' + prepared.profile);
   const browser = await getBrowser();
+  console.info('[Render] Creating isolated browser context');
   const context = await browser.newContext({
     viewport: options.viewport || { width: 1280, height: 960 },
     deviceScaleFactor: options.deviceScaleFactor || 2,
@@ -154,6 +159,8 @@ export async function createRenderPage(options: {
     throw error;
   }
 }
+
+export function isBrowserConnected(): boolean { return Boolean(browserInstance?.isConnected()); }
 
 export async function closeBrowser(): Promise<void> {
   if (browserInstance) {
