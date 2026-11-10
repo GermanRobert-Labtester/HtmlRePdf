@@ -118,6 +118,7 @@ async function startServer() {
         version: '1.0.0',
         timestamp: new Date().toISOString(),
         renderingProfiles: ['local-bundle', 'public-web'],
+        hasGeminiApiKey: Boolean(process.env.GEMINI_API_KEY),
       });
     } catch (err: any) {
       res.status(500).json({ status: 'error', message: err.message });
