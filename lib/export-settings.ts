@@ -347,7 +347,6 @@ export function validateExportSource(source?: ConvertSource): {
     const isValidProtocol =
       trimmed.startsWith('http://') ||
       trimmed.startsWith('https://') ||
-      trimmed.startsWith('file://') ||
       trimmed.startsWith('/api/preview/');
     if (!isValidProtocol) {
       errors['url'] = 'URL must begin with http://, https://, or /api/preview/';
