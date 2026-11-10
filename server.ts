@@ -60,7 +60,8 @@ async function startServer() {
   };
   const apiGuard = (req: Request, res: Response, next: NextFunction) => {
     const origin = req.get('Origin');
-    if (origin && !allowedOrigins.has(origin)) return res.status(403).json({ error: 'Origin not allowed' });
+    const opaquePreviewAsset = origin === 'null' && req.method === 'GET' && req.originalUrl.startsWith('/api/preview/');
+    if (origin && !allowedOrigins.has(origin) && !opaquePreviewAsset) return res.status(403).json({ error: 'Origin not allowed' });
     if (localOnly && isDev && !restToken && !proxySecret) return next();
     const bearer = req.get('Authorization')?.match(/^Bearer (.+)$/i)?.[1];
     const proxy = req.get('X-Studio-Proxy-Secret');
@@ -271,7 +272,10 @@ async function startServer() {
       "sandbox; default-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; script-src 'none'; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'");
     res.setHeader('X-Frame-Options', 'SAMEORIGIN');
     res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
+    // An iframe with CSP sandbox has an opaque origin; allow its own static assets.
+    // Authentication still applies to these unpredictable bundle URLs.
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    res.setHeader('Access-Control-Allow-Origin', 'null');
     res.setHeader('Cache-Control', 'no-store');
     express.static(targetDir, { index: 'index.html', dotfiles: 'deny', fallthrough: false })(req, res, next);
   });
