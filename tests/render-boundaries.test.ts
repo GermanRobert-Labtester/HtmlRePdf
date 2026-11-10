@@ -191,7 +191,7 @@ test('hosted REST/MCP require server-side credentials; uploaded scripts cannot a
     const zip = new AdmZip();
     zip.addFile('../escape.html', Buffer.from('bad'));
     const malicious = new FormData();
-    malicious.append('file', new File([zip.toBuffer()], 'bad.zip'));
+    malicious.append('file', new File([Uint8Array.from(zip.toBuffer()).buffer as ArrayBuffer], 'bad.zip'));
     const denied = await fetch(base + '/api/upload', { method: 'POST', headers, body: malicious });
     assert.ok(denied.status >= 400);
   } finally {
